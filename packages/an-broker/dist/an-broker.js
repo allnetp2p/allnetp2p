@@ -1,0 +1,1 @@
+(()=>{"use strict";class s{constructor(){this.prefix="test-prefix"}handle(s){postMessage({prefix:this.prefix,gotMessage:s})}}(()=>{const e=new s;onmessage=s=>{e.handle(s.data)}})()})();

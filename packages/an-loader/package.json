@@ -1,0 +1,42 @@
+{
+  "name": "@allnetp2p/an-loader",
+  "version": "0.0.1",
+  "description": "allnet entrypoint javascript",
+  "keywords": [
+    "allnet",
+    "p2p",
+    "api"
+  ],
+  "type": "module",
+  "homepage": "https://github.com/allnetp2p/allnetp2p/tree/main/packages/an-worker-api#readme",
+  "license": "Apache-2.0",
+  "browser": "lib/an-loader.mjs",
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/allnetp2p/allnetp2p.git"
+  },
+  "bugs": {
+    "url": "https://github.com/allnetp2p/allnetp2p/issues"
+  },
+  "scripts": {
+    "lint": "npx standard",
+    "build": "npx webpack build"
+  },
+  "dependencies": {
+    "@allnetp2p/an-broker": "^0.0.1"
+  },
+  "devDependencies": {
+    "standard": "^16.0.4",
+    "webpack": "^5.58.2",
+    "webpack-cli": "^4.9.0"
+  },
+  "standard": {
+    "ignore": [
+      "dist"
+    ],
+    "env": ["browser", "es2020"]
+  }
+}
