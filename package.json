@@ -14,7 +14,8 @@
     "bootstrap": "npx lerna bootstrap",
     "lint": "npx lerna run lint",
     "build": "npx lerna run build",
-    "test": "npm run-script bootstrap && npm run-script lint && npm run-script build",
+    "mocha": "npx lerna run mocha",
+    "test": "npm run-script bootstrap && npm run-script lint && npm run-script build && npm run-script mocha",
     "gen-cert": "openssl req -newkey rsa:2048 -new -nodes -x509 -days 3650 -keyout key.pem -out cert.pem",
     "start": "npm test && npx http-server packages/an-loader/dist -p 12888 -a 127.0.0.1 --cors -S"
   },
