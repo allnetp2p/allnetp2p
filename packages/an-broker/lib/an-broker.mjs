@@ -1,19 +1,11 @@
-class AnBroker {
-  constructor () {
-    this.prefix = 'test-prefix'
-  }
+import { AnWorkerApi } from '@allnetp2p/an-worker-api'
 
-  handle (msg) {
-    postMessage({
-      prefix: this.prefix,
-      gotMessage: msg
-    })
-  }
-}
-
-(() => {
-  const broker = new AnBroker()
-  onmessage = evt => {
-    broker.handle(evt.data)
-  }
-})()
+(async () => {
+  console.log(AnWorkerApi, typeof AnWorkerApi, Object.keys(AnWorkerApi))
+  const workerApi = new AnWorkerApi()
+  // TODO pull version from package.json
+  await workerApi.registerModule('system.allnetp2p.broker@0.0.1')
+  console.log('BROKER WORKER REGISTER SUCCESS')
+})().then(() => {}, err => {
+  console.error(err)
+})

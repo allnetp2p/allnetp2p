@@ -23,10 +23,23 @@ import brokerSource from '../node_modules/@allnetp2p/an-broker/dist/an-broker.js
   console.log('@@-loader-@@ - broker worker: ', brokerWorker)
 
   brokerWorker.onmessage = evt => {
-    console.log('@@-loader-@@ - broker message: ', evt.data)
+    const data = evt.data
+    if (data.type === 'registerModule') {
+      brokerWorker.postMessage({
+        dir: 'res',
+        msgId: data.msgId
+      })
+    } else {
+      brokerWorker.postMessage({
+        dir: 'res',
+        msgId: data.msgId,
+        error: 'unhandled req type: ' + data.type
+      })
+    }
+    // console.log('@@-loader-@@ - broker message: ', evt.data)
   }
 
-  brokerWorker.postMessage('test-message-from-an-loader')
+  // brokerWorker.postMessage('test-message-from-an-loader')
 
   const passphrase = await getUserPassphrase()
   const signKeypair = await loadOrGenerateSignatureKeypair(passphrase)
