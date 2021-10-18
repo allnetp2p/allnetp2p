@@ -7,7 +7,8 @@ const pathDist = path.resolve(root, 'dist')
 const pathLib = path.resolve(root, 'lib')
 
 module.exports = {
-  mode: 'production',
+  mode: 'development',
+  devtool: 'inline-source-map',
   target: ['web', 'es2020'],
   entry: path.resolve(pathLib, 'an-loader.mjs'),
   output: {

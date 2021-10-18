@@ -6,6 +6,10 @@ import { AnWorkerApi } from '@allnetp2p/an-worker-api'
   // TODO pull version from package.json
   await workerApi.registerModule('system.allnetp2p.broker@0.0.1')
   console.log('BROKER WORKER REGISTER SUCCESS')
+
+  setTimeout(() => {
+    throw new Error('can debug?')
+  }, 1000)
 })().then(() => {}, err => {
   console.error(err)
 })

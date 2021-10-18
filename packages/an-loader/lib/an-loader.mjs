@@ -45,6 +45,10 @@ import brokerSource from '../node_modules/@allnetp2p/an-broker/dist/an-broker.js
   const signKeypair = await loadOrGenerateSignatureKeypair(passphrase)
 
   console.log('SIGN KEYPAIR IDENTITY', signKeypair)
+
+  setTimeout(() => {
+    throw new Error('can debug?')
+  }, 1000)
 })().then(() => {}, err => {
   console.error(err)
 })
