@@ -27,6 +27,7 @@
   },
   "dependencies": {
     "@allnetp2p/an-broker": "^0.0.1",
+    "@allnetp2p/an-identity": "^0.0.1",
     "base64-js": "^1.5.1",
     "idb-keyval": "^6.0.2"
   },

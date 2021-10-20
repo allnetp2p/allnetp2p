@@ -1,8 +1,13 @@
 import * as base64 from 'base64-js'
 import * as idbKv from 'idb-keyval'
 import brokerSource from '../node_modules/@allnetp2p/an-broker/dist/an-broker.js?raw'
+import { AnIdentityConfig, AnIdentity } from '@allnetp2p/an-identity'
 
 (async () => {
+  const identityConfig = new AnIdentityConfig()
+  const identity = await AnIdentity.createAnIdentity(identityConfig)
+  console.log('@@-loader-@@ - identity: ', identity)
+
   console.log('@@-loader-@@ - broker source: ', brokerSource)
 
   const brokerBlob = new Blob(
