@@ -17,7 +17,7 @@
     "mocha": "npx lerna run mocha",
     "test": "npm run-script bootstrap && npm run-script lint && npm run-script build && npm run-script mocha",
     "gen-cert": "openssl req -newkey rsa:2048 -new -nodes -x509 -days 3650 -keyout key.pem -out cert.pem",
-    "start": "npm test && npx http-server packages/an-loader/dist -p 12888 -a 127.0.0.1 --cors -S -o -d false --gzip --brotli"
+    "start": "npm test && npx http-server packages/an-loader/dist -p 12888 -a 127.0.0.1 -S -o -d false --gzip --brotli"
   },
   "devDependencies": {
     "http-server": "^13.0.2",
