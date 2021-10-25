@@ -1,5 +1,7 @@
 import {
   base64url,
+  calculateJwkThumbprint,
+  GeneralSign,
   exportJWK,
   generateKeyPair
 } from 'jose-browser-runtime'
@@ -105,40 +107,98 @@ async function _genIdent (config, passphraseKey) {
       throw new Error('unsupported passphraseSymAlg: "' + config.passphraseSymAlg + '"')
     }
 
-    const sigPairs = []
-    for (const sigAlg of config.signatureAlgList) {
-      const pair = await generateKeyPair(sigAlg, { extractable: true })
-
-      const publicKeyJwk = await exportJWK(pair.publicKey)
-      const encryptedPrivateKey = await encryptPrivKey(pair.privateKey)
-
-      sigPairs.push({
-        publicKey: pair.publicKey,
-        publicKeyJwk,
-        privateKey: pair.privateKey,
-        encryptedPrivateKey
-      })
+    let expiresAtUtcMs = Date.now() + config.expireAfterCountMs
+    if (expiresAtUtcMs > Number.MAX_SAFE_INTEGER) {
+      expiresAtUtcMs = Number.MAX_SAFE_INTEGER
     }
 
-    const encPairs = []
+    const fullIdentity = {
+      expiresAtUtcMs,
+      enc: [],
+      sig: [],
+      sigBytes: ''
+    }
+
     for (const encDef of config.encryptionAlgList) {
       const [alg, enc] = encDef.split(':')
       const pair = await generateKeyPair(alg, { extractable: true })
 
       const publicKeyJwk = await exportJWK(pair.publicKey)
+      const publicThumbprint = await calculateJwkThumbprint(publicKeyJwk)
       const encryptedPrivateKey = await encryptPrivKey(pair.privateKey)
 
-      encPairs.push({
-        publicKey: pair.publicKey,
-        publicKeyJwk,
-        privateKey: pair.privateKey,
-        encryptedPrivateKey,
-        enc
+      fullIdentity.enc.push({
+        alg,
+        enc,
+        jwk: publicKeyJwk,
+        id: publicThumbprint,
+        _priv: {
+          publicKey: pair.publicKey,
+          privateKey: pair.privateKey,
+          encryptedPrivateKey
+        }
       })
     }
 
-    console.log('sigPairs', sigPairs)
-    console.log('encPairs', encPairs)
+    for (const sigAlg of config.signatureAlgList) {
+      const pair = await generateKeyPair(sigAlg, { extractable: true })
+
+      const publicKeyJwk = await exportJWK(pair.publicKey)
+      const publicThumbprint = await calculateJwkThumbprint(publicKeyJwk)
+      const encryptedPrivateKey = await encryptPrivKey(pair.privateKey)
+
+      fullIdentity.sig.push({
+        alg: sigAlg,
+        jwk: publicKeyJwk,
+        id: publicThumbprint,
+        _priv: {
+          publicKey: pair.publicKey,
+          privateKey: pair.privateKey,
+          encryptedPrivateKey
+        }
+      })
+    }
+
+    const sigBytes = []
+    let sigBytesCount = 0
+
+    const expiresAtBytes = new ArrayBuffer(8)
+    const dv = new DataView(expiresAtBytes)
+    dv.setFloat64(0, fullIdentity.expiresAtUtcMs, true)
+    sigBytes.push(new Uint8Array(expiresAtBytes))
+    sigBytesCount += 8
+
+    for (const enc of fullIdentity.enc) {
+      const bytes = base64url.decode(enc.id)
+      sigBytes.push(bytes)
+      sigBytesCount += bytes.byteLength
+    }
+
+    for (const sig of fullIdentity.sig) {
+      const bytes = base64url.decode(sig.id)
+      sigBytes.push(bytes)
+      sigBytesCount += bytes.byteLength
+    }
+
+    const sigBytesAll = new Uint8Array(sigBytesCount)
+    let offset = 0
+
+    for (const bytes of sigBytes) {
+      sigBytesAll.set(bytes, offset)
+      offset += bytes.byteLength
+    }
+
+    const sign = new GeneralSign(sigBytesAll)
+
+    for (const sig of fullIdentity.sig) {
+      sign
+        .addSignature(sig._priv.privateKey)
+        .setProtectedHeader({ alg: sig.alg })
+    }
+
+    fullIdentity.jws = await sign.sign()
+
+    console.log('full', fullIdentity)
 
     throw new Error('unimplemented')
   } else {
@@ -170,61 +230,5 @@ export class AnIdentity {
     } catch {
       return await _genIdent(config, passphraseKey)
     }
-
-    /*
-    const {
-      publicKey: signPublicKey,
-      privateKey: signPrivateKey
-    } = await generateKeyPair('ES384', { extractable: true })
-    console.log('sign publicKey', signPublicKey)
-    console.log('sign privateKey', signPrivateKey)
-
-    const {
-      publicKey: encPublicKey,
-      privateKey: encPrivateKey
-    } = await generateKeyPair('ECDH-ES', { extractable: true })
-    console.log('enc publicKey', encPublicKey)
-    console.log('enc privateKey', encPrivateKey)
-
-    const pbkdf2Salt = crypto.getRandomValues(new Uint8Array(24))
-    const pbkdf2HashAlgo = 'SHA-512'
-    const pbkdf2Iterations = 200000
-    const secretKey = await crypto.subtle.deriveKey(
-      {
-        name: 'PBKDF2',
-        hash: pbkdf2HashAlgo,
-        salt: pbkdf2Salt,
-        iterations: pbkdf2Iterations
-      },
-      passphrase,
-      {
-        name: 'AES-GCM',
-        length: 8 * 32
-      },
-      false,
-      ['encrypt', 'decrypt']
-    )
-
-    console.log('aes gcm 256 secret', secretKey)
-
-    const dirJwe = await new CompactEncrypt(
-      (new TextEncoder()).encode('test message')
-    ).setProtectedHeader({ alg: 'dir', enc: 'A256GCM' }).encrypt(secretKey)
-
-    console.log('dir/a256gcm jwe', dirJwe)
-
-    const ecdhJwe = await new CompactEncrypt(
-      (new TextEncoder()).encode('test message')
-    ).setProtectedHeader({ alg: 'ECDH-ES', enc: 'A256GCM' }).encrypt(encPublicKey)
-
-    console.log('ecdh-es/a256gcm jwe', ecdhJwe)
-
-    return new AnIdentity(
-      signPublicKey,
-      signPrivateKey,
-      encPublicKey,
-      encPrivateKey
-    )
-    */
   }
 }
