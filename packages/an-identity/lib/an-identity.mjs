@@ -5,6 +5,7 @@ import {
   exportJWK,
   generateKeyPair
 } from 'jose-browser-runtime'
+import * as idbKv from 'idb-keyval'
 
 /**
  * AnIdentity Algorithm Tuning.
@@ -24,8 +25,8 @@ export class AnIdentityConfig {
     // crypto.subtle wrapKey alg + colon delimited config
     this.passphraseSymAlg = 'AES-GCM:256'
 
-    // milliseconds in the future to set new identity expirations
-    this.expireAfterCountMs = Number.MAX_SAFE_INTEGER
+    // microseconds in the future to set new identity expirations
+    this.expireAfterCountMicros = Number.MAX_SAFE_INTEGER
 
     // function returning Promise<CryptoKey> marked with deriveKey
     this.passphraseGetCb = async () => {
@@ -107,16 +108,21 @@ async function _genIdent (config, passphraseKey) {
       throw new Error('unsupported passphraseSymAlg: "' + config.passphraseSymAlg + '"')
     }
 
-    let expiresAtUtcMs = Date.now() + config.expireAfterCountMs
-    if (expiresAtUtcMs > Number.MAX_SAFE_INTEGER) {
-      expiresAtUtcMs = Number.MAX_SAFE_INTEGER
+    let expiresAtUtcMicros = Date.now() * 1000 + config.expireAfterCountMicros
+    if (expiresAtUtcMicros > Number.MAX_SAFE_INTEGER) {
+      expiresAtUtcMicros = Number.MAX_SAFE_INTEGER
     }
 
     const fullIdentity = {
-      expiresAtUtcMs,
+      expiresAtUtcMicros,
       enc: [],
-      sig: [],
-      sigBytes: ''
+      sig: []
+    }
+
+    const saveIdentity = {
+      expiresAtUtcMicros,
+      enc: [],
+      sig: []
     }
 
     for (const encDef of config.encryptionAlgList) {
@@ -124,7 +130,7 @@ async function _genIdent (config, passphraseKey) {
       const pair = await generateKeyPair(alg, { extractable: true })
 
       const publicKeyJwk = await exportJWK(pair.publicKey)
-      const publicThumbprint = await calculateJwkThumbprint(publicKeyJwk)
+      const publicThumbprint = await calculateJwkThumbprint(publicKeyJwk, 'sha256')
       const encryptedPrivateKey = await encryptPrivKey(pair.privateKey)
 
       fullIdentity.enc.push({
@@ -138,13 +144,21 @@ async function _genIdent (config, passphraseKey) {
           encryptedPrivateKey
         }
       })
+
+      saveIdentity.enc.push({
+        alg,
+        enc,
+        jwk: publicKeyJwk,
+        id: publicThumbprint,
+        encryptedPrivateKey
+      })
     }
 
     for (const sigAlg of config.signatureAlgList) {
       const pair = await generateKeyPair(sigAlg, { extractable: true })
 
       const publicKeyJwk = await exportJWK(pair.publicKey)
-      const publicThumbprint = await calculateJwkThumbprint(publicKeyJwk)
+      const publicThumbprint = await calculateJwkThumbprint(publicKeyJwk, 'sha256')
       const encryptedPrivateKey = await encryptPrivKey(pair.privateKey)
 
       fullIdentity.sig.push({
@@ -157,38 +171,37 @@ async function _genIdent (config, passphraseKey) {
           encryptedPrivateKey
         }
       })
+
+      saveIdentity.sig.push({
+        alg: sigAlg,
+        jwk: publicKeyJwk,
+        id: publicThumbprint,
+        encryptedPrivateKey
+      })
     }
 
+    // the payload for the signatures is:
+    // - 8 bytes i64LE utc ms expiration
+    // - [enc[N].id, ..]
+    // - [sig[N].id, ..]
     const sigBytes = []
-    let sigBytesCount = 0
 
     const expiresAtBytes = new ArrayBuffer(8)
     const dv = new DataView(expiresAtBytes)
-    dv.setFloat64(0, fullIdentity.expiresAtUtcMs, true)
+    dv.setBigInt64(0, BigInt(fullIdentity.expiresAtUtcMicros), true)
     sigBytes.push(new Uint8Array(expiresAtBytes))
-    sigBytesCount += 8
 
     for (const enc of fullIdentity.enc) {
-      const bytes = base64url.decode(enc.id)
-      sigBytes.push(bytes)
-      sigBytesCount += bytes.byteLength
+      sigBytes.push(base64url.decode(enc.id))
     }
 
     for (const sig of fullIdentity.sig) {
-      const bytes = base64url.decode(sig.id)
-      sigBytes.push(bytes)
-      sigBytesCount += bytes.byteLength
+      sigBytes.push(base64url.decode(sig.id))
     }
 
-    const sigBytesAll = new Uint8Array(sigBytesCount)
-    let offset = 0
+    const sigBytesHash = await _concatHash(sigBytes)
 
-    for (const bytes of sigBytes) {
-      sigBytesAll.set(bytes, offset)
-      offset += bytes.byteLength
-    }
-
-    const sign = new GeneralSign(sigBytesAll)
+    const sign = new GeneralSign(sigBytesHash)
 
     for (const sig of fullIdentity.sig) {
       sign
@@ -197,8 +210,24 @@ async function _genIdent (config, passphraseKey) {
     }
 
     fullIdentity.jws = await sign.sign()
+    saveIdentity.jws = fullIdentity.jws
+
+    // unlike jwk thumbprints, there's no standard here...
+    // using a sha-256 of: `payload + [protected + signature, ..]`
+    const idBytes = []
+    idBytes.push(base64url.decode(fullIdentity.jws.payload))
+    for (const sig of fullIdentity.jws.signatures) {
+      idBytes.push(base64url.decode(sig.protected))
+      idBytes.push(base64url.decode(sig.signature))
+    }
+
+    fullIdentity.id = base64url.encode(await _concatHash(idBytes))
+    saveIdentity.id = fullIdentity.id
 
     console.log('full', fullIdentity)
+    console.log('save', saveIdentity)
+
+    await idbKv.set('anActiveIdentity', saveIdentity)
 
     throw new Error('unimplemented')
   } else {
@@ -231,4 +260,25 @@ export class AnIdentity {
       return await _genIdent(config, passphraseKey)
     }
   }
+}
+
+// -- helpers -- //
+
+async function _concatHash (bufs) {
+  let len = 0
+  for (const buf of bufs) {
+    len += buf.byteLength
+  }
+
+  const out = new Uint8Array(len)
+  let offset = 0
+
+  for (const buf of bufs) {
+    out.set(buf, offset)
+    offset += buf.byteLength
+  }
+
+  const hash = await crypto.subtle.digest('SHA-256', out)
+
+  return new Uint8Array(hash)
 }
