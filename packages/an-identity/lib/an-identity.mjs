@@ -1,9 +1,10 @@
 import {
   base64url,
   calculateJwkThumbprint,
-  GeneralSign,
   exportJWK,
-  generateKeyPair
+  GeneralSign,
+  generateKeyPair,
+  importJWK
 } from 'jose-browser-runtime'
 import * as idbKv from 'idb-keyval'
 
@@ -45,7 +46,142 @@ export class AnIdentityConfig {
 }
 
 async function _loadIdent (passphraseKey) {
-  throw new Error('unimplemented')
+  const activeId = await idbKv.get('anIdActive:')
+
+  console.log('activeId', activeId)
+
+  const saveIdentity = await idbKv.get('anIdPriv:' + activeId)
+
+  console.log('loaded saveIdentity', saveIdentity)
+
+  const decryptContext = {}
+
+  for (const enc of saveIdentity.enc) {
+    enc._priv = await _decryptPriv(enc, decryptContext, passphraseKey)
+    delete enc.encryptedPrivateKey
+  }
+
+  for (const sig of saveIdentity.sig) {
+    sig._priv = await _decryptPriv(sig, decryptContext, passphraseKey)
+    delete sig.encryptedPrivateKey
+  }
+
+  const fullIdentity = saveIdentity
+
+  console.log('loaded fullIdentity', fullIdentity)
+
+  const pubIdentity = {
+    expiresAtUtcMicros: fullIdentity.expiresAtUtcMicros,
+    id: fullIdentity.id,
+    jws: fullIdentity.jws,
+    enc: [],
+    sig: []
+  }
+
+  for (const enc of fullIdentity.enc) {
+    pubIdentity.enc.push({
+      alg: enc.alg,
+      enc: enc.enc,
+      id: enc.id,
+      jwk: enc.jwk
+    })
+  }
+
+  for (const sig of fullIdentity.sig) {
+    pubIdentity.sig.push({
+      alg: sig.alg,
+      id: sig.id,
+      jwk: sig.jwk
+    })
+  }
+
+  console.log('loaded pubIdentity', pubIdentity)
+
+  return new AnIdentity(fullIdentity, pubIdentity)
+}
+
+async function _decryptPriv (item, ctx, passphraseKey) {
+  const outAlg = item.alg
+  const enc = item.encryptedPrivateKey
+  if (!enc.passphraseSecretAlg || !enc.passphraseSecretAlg.startsWith('PBKDF2:')) {
+    throw new Error('bad secret alg')
+  }
+  if (!enc.passphraseSymAlg || !enc.passphraseSymAlg.startsWith('AES-GCM:')) {
+    throw new Error('bad sym alg')
+  }
+
+  const algParts = enc.passphraseSecretAlg.split(':')
+  const hash = algParts[1]
+  const iters = parseInt(algParts[2], 10)
+  const [alg, length] = enc.passphraseSymAlg.split(':')
+
+  if (!ctx.salt || ctx.salt !== enc.passphraseSecretOpts.salt) {
+    console.log('regenerate secret key...')
+
+    ctx.salt = enc.passphraseSecretOpts.salt
+    ctx.saltBytes = base64url.decode(ctx.salt)
+    ctx.secretKey = await crypto.subtle.deriveKey(
+      {
+        name: 'PBKDF2',
+        hash,
+        salt: ctx.saltBytes,
+        iterations: iters
+      },
+      passphraseKey,
+      {
+        name: alg,
+        length: parseInt(length, 10)
+      },
+      false,
+      ['unwrapKey']
+    )
+  }
+
+  console.log('ctx.secretKey', ctx.secretKey)
+
+  let decKeyAlg = null
+  let namedCurve = null
+  let cap = null
+  if (outAlg === 'ECDH-ES') {
+    decKeyAlg = 'ECDH'
+    namedCurve = 'P-256'
+    cap = ['deriveKey', 'deriveBits']
+  } else if (outAlg === 'ES384') {
+    decKeyAlg = 'ECDSA'
+    namedCurve = 'P-384'
+    cap = ['sign']
+  } else {
+    throw new Error('unsupported priv key alg: "' + outAlg + '"')
+  }
+
+  const privateKey = await crypto.subtle.unwrapKey(
+    'jwk',
+    base64url.decode(enc.privateKey),
+    ctx.secretKey,
+    {
+      name: 'AES-GCM',
+      iv: base64url.decode(enc.passphraseSymOpts.iv),
+      tagLength: 128
+    },
+    {
+      name: decKeyAlg,
+      namedCurve
+    },
+    true,
+    cap
+  )
+
+  console.log('EXTRACTED PRIV KEY!!:', privateKey)
+
+  const publicKey = await importJWK(item.jwk, item.alg)
+
+  console.log('pub key: ', publicKey)
+
+  return {
+    encryptedPrivateKey: item.encryptedPrivateKey,
+    privateKey,
+    publicKey
+  }
 }
 
 async function _genIdent (config, passphraseKey) {
@@ -119,6 +255,12 @@ async function _genIdent (config, passphraseKey) {
       sig: []
     }
 
+    const pubIdentity = {
+      expiresAtUtcMicros,
+      enc: [],
+      sig: []
+    }
+
     const saveIdentity = {
       expiresAtUtcMicros,
       enc: [],
@@ -143,6 +285,13 @@ async function _genIdent (config, passphraseKey) {
           privateKey: pair.privateKey,
           encryptedPrivateKey
         }
+      })
+
+      pubIdentity.enc.push({
+        alg,
+        enc,
+        jwk: publicKeyJwk,
+        id: publicThumbprint
       })
 
       saveIdentity.enc.push({
@@ -170,6 +319,12 @@ async function _genIdent (config, passphraseKey) {
           privateKey: pair.privateKey,
           encryptedPrivateKey
         }
+      })
+
+      pubIdentity.sig.push({
+        alg: sigAlg,
+        jwk: publicKeyJwk,
+        id: publicThumbprint
       })
 
       saveIdentity.sig.push({
@@ -210,6 +365,7 @@ async function _genIdent (config, passphraseKey) {
     }
 
     fullIdentity.jws = await sign.sign()
+    pubIdentity.jws = fullIdentity.jws
     saveIdentity.jws = fullIdentity.jws
 
     // unlike jwk thumbprints, there's no standard here...
@@ -222,14 +378,18 @@ async function _genIdent (config, passphraseKey) {
     }
 
     fullIdentity.id = base64url.encode(await _concatHash(idBytes))
+    pubIdentity.id = fullIdentity.id
     saveIdentity.id = fullIdentity.id
 
     console.log('full', fullIdentity)
+    console.log('pub', pubIdentity)
     console.log('save', saveIdentity)
 
-    await idbKv.set('anActiveIdentity', saveIdentity)
+    await idbKv.set('anIdPub:' + pubIdentity.id, pubIdentity)
+    await idbKv.set('anIdPriv:' + saveIdentity.id, saveIdentity)
+    await idbKv.set('anIdActive:', saveIdentity.id)
 
-    throw new Error('unimplemented')
+    return new AnIdentity(fullIdentity, pubIdentity)
   } else {
     throw new Error('unsupported passphraseSecretAlg: "' + config.passphraseSecretAlg + '"')
   }
@@ -242,8 +402,10 @@ export class AnIdentity {
   /**
    * Create a new identity. Use the async constructor createAnIdentity.
    */
-  // constructor () {
-  // }
+  constructor (fullIdentity, pubIdentity) {
+    this.fullIdentity = fullIdentity
+    this.pubIdentity = pubIdentity
+  }
 
   /**
    * Async constructor - Create a new identity.
@@ -256,7 +418,8 @@ export class AnIdentity {
 
     try {
       return await _loadIdent(passphraseKey)
-    } catch {
+    } catch (e) {
+      console.error('faild to load identity, generating new...', e)
       return await _genIdent(config, passphraseKey)
     }
   }
