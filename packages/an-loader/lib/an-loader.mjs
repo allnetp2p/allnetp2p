@@ -6,6 +6,13 @@ import { AnIdentityConfig, AnIdentity } from '@allnetp2p/an-identity'
   const identity = await AnIdentity.createAnIdentity(identityConfig)
   console.log('@@-loader-@@ - identity: ', identity)
 
+  const jwt = await identity.signCapability({
+    capabilities: { 'test.zombie.what.is.this': true },
+    subject: identity.fullIdentity.id
+  })
+  console.log('@@-loader-@@ - jwt: ', jwt)
+  console.log('@@-loader-@@ - jwt-validate: ', await AnIdentity.validateJWT(jwt))
+
   console.log('@@-loader-@@ - broker source: ', brokerSource)
 
   const brokerBlob = new Blob(

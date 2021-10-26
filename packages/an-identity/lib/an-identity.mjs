@@ -1,10 +1,14 @@
 import {
   base64url,
   calculateJwkThumbprint,
+  // decodeProtectedHeader,
   exportJWK,
   GeneralSign,
+  generalVerify,
   generateKeyPair,
-  importJWK
+  importJWK,
+  jwtVerify,
+  SignJWT
 } from 'jose-browser-runtime'
 import * as idbKv from 'idb-keyval'
 
@@ -44,6 +48,117 @@ export class AnIdentityConfig {
     }
   }
 }
+
+/**
+ * Provides allnet system JWK JWS JWE JWT functionality.
+ */
+export class AnIdentity {
+  /**
+   * Create a new identity. Use the async constructor createAnIdentity.
+   */
+  constructor (fullIdentity, pubIdentity) {
+    this.fullIdentity = fullIdentity
+    this.pubIdentity = pubIdentity
+  }
+
+  /**
+   * Async constructor - Create a new identity.
+   *
+   * @param {function} getPassphraseCb should return a promise that resolves
+   *                   to a passphrase as a CryptoKey
+   */
+  static async createAnIdentity (config) {
+    const passphraseKey = await config.passphraseGetCb()
+
+    try {
+      return await _loadIdent(passphraseKey)
+    } catch (e) {
+      console.error('faild to load identity, generating new...', e)
+      return await _genIdent(config, passphraseKey)
+    }
+  }
+
+  /**
+   * Validate a public identity.
+   * This only checks the construction of the object and the self-signing,
+   * you should still decide if you want to trust it.
+   *
+   * Will throw an error on invalid identity, returns undefined on success.
+   */
+  static async validatePublicIdentity (pubIdentity) {
+    // FIXME this is just a stub that does a raw signature validation
+    //       we need to also check all the hashes, etc
+    for (const sig of pubIdentity.sig) {
+      const pubKey = await importJWK(sig.jwk, sig.alg)
+
+      // will throw on failed validation
+      await generalVerify(pubIdentity.jws, pubKey)
+    }
+  }
+
+  /**
+   * Validate and register a public identity.
+   * Once an identity is registered, it can be used to:
+   *  - send encrypted messages
+   *  - validate JWT claims
+   */
+  static async validateAndRegisterPublicIdentity (publicIdentity) {
+    await AnIdentity.validatePublicIdentity(publicIdentity)
+    await idbKv.set('anIdPub:' + publicIdentity.id, publicIdentity)
+  }
+
+  /**
+   * Verify a JTW claim.
+   * This checks the signature, and raw data validation,
+   * returning the claim data. You need to make sure the claim data is correct.
+   */
+  static async validateJWT (jwtList) {
+    const content = JSON.parse((new TextDecoder()).decode(
+      base64url.decode(jwtList[0].split('.')[1])
+    ))
+
+    const iss = await idbKv.get('anIdPub:' + content.iss)
+    const pubKey = await importJWK(iss.sig[0].jwk, iss.sig[0].alg)
+
+    for (const jwt of jwtList) {
+      // Q: do we need to verify the claim items here too?
+      //    it's probably ok, since we're leaving that up to our caller.
+      await jwtVerify(jwt, pubKey, {
+        issuer: content.iss,
+        subject: content.sub
+      })
+    }
+
+    return content
+  }
+
+  // -- methods requiring full private key access -- //
+
+  /**
+   */
+  async signCapability (opts) {
+    opts = opts || {}
+    opts.expiration = opts.expiration || '1day'
+    opts.capabilities = opts.capabilities || {}
+
+    const out = []
+
+    for (const sig of this.fullIdentity.sig) {
+      const jwt = new SignJWT(opts.capabilities)
+      jwt.setProtectedHeader({ alg: sig.alg })
+      jwt.setExpirationTime(opts.expiration)
+      jwt.setIssuer(this.fullIdentity.id)
+      if (opts.subject) {
+        jwt.setSubject(opts.subject)
+      }
+      out.push(await jwt.sign(sig._priv.privateKey))
+    }
+
+    return out
+  }
+}
+
+// -- helpers -- //
 
 async function _loadIdent (passphraseKey) {
   const activeId = await idbKv.get('anIdActive:')
@@ -385,7 +500,8 @@ async function _genIdent (config, passphraseKey) {
     console.log('pub', pubIdentity)
     console.log('save', saveIdentity)
 
-    await idbKv.set('anIdPub:' + pubIdentity.id, pubIdentity)
+    await AnIdentity.validateAndRegisterPublicIdentity(pubIdentity)
+
     await idbKv.set('anIdPriv:' + saveIdentity.id, saveIdentity)
     await idbKv.set('anIdActive:', saveIdentity.id)
 
@@ -394,38 +510,6 @@ async function _genIdent (config, passphraseKey) {
     throw new Error('unsupported passphraseSecretAlg: "' + config.passphraseSecretAlg + '"')
   }
 }
-
-/**
- * Provides allnet system JWK JWS JWE JWT functionality.
- */
-export class AnIdentity {
-  /**
-   * Create a new identity. Use the async constructor createAnIdentity.
-   */
-  constructor (fullIdentity, pubIdentity) {
-    this.fullIdentity = fullIdentity
-    this.pubIdentity = pubIdentity
-  }
-
-  /**
-   * Async constructor - Create a new identity.
-   *
-   * @param {function} getPassphraseCb should return a promise that resolves
-   *                   to a passphrase as a CryptoKey
-   */
-  static async createAnIdentity (config) {
-    const passphraseKey = await config.passphraseGetCb()
-
-    try {
-      return await _loadIdent(passphraseKey)
-    } catch (e) {
-      console.error('faild to load identity, generating new...', e)
-      return await _genIdent(config, passphraseKey)
-    }
-  }
-}
-
-// -- helpers -- //
 
 async function _concatHash (bufs) {
   let len = 0
