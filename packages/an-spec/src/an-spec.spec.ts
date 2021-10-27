@@ -1,5 +1,5 @@
-import assert from 'assert'
-import { AnModuleSpec } from '../lib/an-spec.mjs'
+import * as assert from 'assert'
+import { AnModuleSpec } from './an-spec'
 
 describe('an-spec test suite', () => {
   it('newAnon', () => {

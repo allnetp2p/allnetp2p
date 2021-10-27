@@ -1,0 +1,19 @@
+{
+  "compilerOptions": {
+      "module": "commonjs",
+      "moduleResolution": "node",
+      "target": "es6",
+      "lib": [ "es6" ],
+      "noImplicitAny": true,
+      "noImplicitThis": true,
+      "strictNullChecks": true,
+      "strictFunctionTypes": true,
+      "strict": true,
+      "outDir": "./lib",
+      "rootDir": "./src",
+      "declaration": true,
+      "forceConsistentCasingInFileNames": true
+  },
+  "include": ["src/**/*"],
+  "exclude": ["node_modules"]
+}

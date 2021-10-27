@@ -7,10 +7,13 @@
     "p2p",
     "api"
   ],
-  "type": "module",
   "homepage": "https://github.com/allnetp2p/allnetp2p/tree/main/packages/an-worker-api#readme",
   "license": "Apache-2.0",
-  "main": "lib/an-spec.mjs",
+  "main": "lib/an-spec.js",
+  "types": "lib/an-spec.d.ts",
+  "files": [
+    "lib/**/*"
+  ],
   "publishConfig": {
     "access": "public"
   },
@@ -22,21 +25,22 @@
     "url": "https://github.com/allnetp2p/allnetp2p/issues"
   },
   "scripts": {
-    "lint": "npx standard",
-    "mocha": "mocha"
+    "lint": "eslint . --ext .ts",
+    "mocha": "env TS_NODE_PROJECT=\"tsconfig.mocha.json\" mocha",
+    "build": "tsc"
   },
   "devDependencies": {
+    "@types/mocha": "^9.0.0",
+    "@types/semver": "^7.3.9",
+    "@typescript-eslint/eslint-plugin": "^5.2.0",
+    "@typescript-eslint/parser": "^5.2.0",
+    "eslint": "^7.18.0",
     "mocha": "^9.1.3",
-    "standard": "^16.0.4"
+    "ts-node": "^10.4.0",
+    "typescript": "^4.4.4"
   },
   "dependencies": {
     "nanoid": "^3.1.30",
     "semver": "^7.3.5"
-  },
-  "standard": {
-    "ignore": [
-      "test/*"
-    ],
-    "env": "mocha"
   }
 }

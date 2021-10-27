@@ -1,22 +1,26 @@
 import { nanoid } from 'nanoid'
-import semver from 'semver'
+import * as semver from 'semver'
 
 /**
  * Represents an allnet module specification identifier.
  * Canonically: [topCategory].[subCategory].[name]@[semver]
  */
 export class AnModuleSpec {
+  name: string
+  version: string
+  canonical: string
+
   /**
    * Generate a new, anonymous module spec
    */
-  static newAnon () {
+  static newAnon (): AnModuleSpec {
     return new AnModuleSpec('anon.anon.' + nanoid() + '@0.0.1-alpha.1')
   }
 
   /**
    * Parse / validate an allnet module spec from a canonical string.
    */
-  constructor (spec) {
+  constructor (spec: string) {
     if (typeof spec !== 'string') {
       throw new Error('spec must be a string')
     }
@@ -37,7 +41,7 @@ export class AnModuleSpec {
       throw new Error('spec version (after "@") must be a valid semver string')
     }
     this.name = nameParts.join('.')
-    this.version = semver.clean(topParts[1])
+    this.version = semver.clean(topParts[1]) || ''
     this.canonical = this.name + '@' + this.version
     Object.freeze(this)
   }
@@ -45,7 +49,7 @@ export class AnModuleSpec {
   /**
    * Get the canonical string representation of this module spec.
    */
-  toString () {
+  toString (): string {
     return this.canonical
   }
 
@@ -53,7 +57,7 @@ export class AnModuleSpec {
    * Check if this module spec version satisfies the given semver requirement.
    * Note, you must check the module names match separate from this call.
    */
-  satisfies (requirement) {
+  satisfies (requirement: string): boolean {
     return semver.satisfies(this.version, requirement)
   }
 }
