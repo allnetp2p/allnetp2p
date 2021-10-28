@@ -1,16 +1,16 @@
 {
-  "name": "@allnetp2p/an-spec",
+  "name": "@allnetp2p/an-types",
   "version": "0.0.1",
-  "description": "allnet module spec generation and validation",
+  "description": "allnet type definitions",
   "keywords": [
     "allnet",
     "p2p",
     "api"
   ],
-  "homepage": "https://github.com/allnetp2p/allnetp2p/tree/main/packages/an-worker-api#readme",
+  "homepage": "https://github.com/allnetp2p/allnetp2p/tree/main/packages/an-types#readme",
   "license": "Apache-2.0",
-  "main": "lib/an-spec.js",
-  "types": "lib/an-spec.d.ts",
+  "main": "lib/index.js",
+  "types": "lib/index.d.ts",
   "files": [
     "lib/**/*"
   ],
@@ -33,7 +33,6 @@
   },
   "devDependencies": {
     "@types/mocha": "^9.0.0",
-    "@types/semver": "^7.3.9",
     "@typescript-eslint/eslint-plugin": "^5.2.0",
     "@typescript-eslint/parser": "^5.2.0",
     "eslint": "^7.18.0",
@@ -41,10 +40,6 @@
     "prettier": "^2.4.1",
     "ts-node": "^10.4.0",
     "typescript": "^4.4.4"
-  },
-  "dependencies": {
-    "nanoid": "^3.1.30",
-    "semver": "^7.3.5"
   },
   "prettier": {
     "semi": false,

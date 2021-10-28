@@ -11,12 +11,13 @@
   },
   "homepage": "https://github.com/allnetp2p/allnetp2p#readme",
   "scripts": {
+    "gen-cert": "openssl req -newkey rsa:2048 -new -nodes -x509 -days 3650 -keyout key.pem -out cert.pem",
     "bootstrap": "npx lerna bootstrap",
+    "fmt": "npx lerna run fmt",
     "lint": "npx lerna run lint",
     "build": "npx lerna run build",
     "mocha": "npx lerna run mocha",
-    "test": "npm run-script bootstrap && npm run-script lint && npm run-script build && npm run-script mocha",
-    "gen-cert": "openssl req -newkey rsa:2048 -new -nodes -x509 -days 3650 -keyout key.pem -out cert.pem",
+    "test": "npm run bootstrap && npm run fmt && npm run lint && npm run build && npm run mocha",
     "start": "npm test && npx http-server packages/an-loader/dist -p 12888 -a 127.0.0.1 -S -o -d false --gzip --brotli"
   },
   "devDependencies": {

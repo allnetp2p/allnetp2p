@@ -13,14 +13,14 @@ export class AnModuleSpec {
   /**
    * Generate a new, anonymous module spec
    */
-  static newAnon (): AnModuleSpec {
+  static newAnon(): AnModuleSpec {
     return new AnModuleSpec('anon.anon.' + nanoid() + '@0.0.1-alpha.1')
   }
 
   /**
    * Parse / validate an allnet module spec from a canonical string.
    */
-  constructor (spec: string) {
+  constructor(spec: string) {
     if (typeof spec !== 'string') {
       throw new Error('spec must be a string')
     }
@@ -30,7 +30,9 @@ export class AnModuleSpec {
     }
     const nameParts = topParts[0].split('.')
     if (nameParts.length !== 3) {
-      throw new Error('spec name (before "@") must contain exactly 2 "." symbols')
+      throw new Error(
+        'spec name (before "@") must contain exactly 2 "." symbols'
+      )
     }
     for (const namePart of nameParts) {
       if (!namePart.match(/^[A-Za-z0-9_-]+$/)) {
@@ -49,7 +51,7 @@ export class AnModuleSpec {
   /**
    * Get the canonical string representation of this module spec.
    */
-  toString (): string {
+  toString(): string {
     return this.canonical
   }
 
@@ -57,7 +59,7 @@ export class AnModuleSpec {
    * Check if this module spec version satisfies the given semver requirement.
    * Note, you must check the module names match separate from this call.
    */
-  satisfies (requirement: string): boolean {
+  satisfies(requirement: string): boolean {
     return semver.satisfies(this.version, requirement)
   }
 }

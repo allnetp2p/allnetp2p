@@ -1,5 +1,5 @@
 import * as assert from 'assert'
-import { AnModuleSpec } from './an-spec'
+import { AnModuleSpec } from '../src/an-spec'
 
 describe('an-spec test suite', () => {
   it('newAnon', () => {
